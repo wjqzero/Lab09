@@ -35,7 +35,7 @@ public class Bank extends SQLiteOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
         // Be careful about spaces and commas when creating a table!
-        db.execSQL("CREATE TABLE " + tablename + "(_id INTEGER PRIMARY KEY, " + col1 + " TEXT," + col2 + " INTEGER," + col3 + " INTEGER)");
+        db.execSQL("CREATE TABLE " + tablename + "(_id INTEGER PRIMARY KEY AUTO_INCREMENT, " + col1 + " TEXT," + col2 + " INTEGER," + col3 + " INTEGER)");
         // Values to be put in one row of one table of the database.
         ContentValues values = new ContentValues();
         //values.put(columnname, 0); // Initialize counter to 0.
@@ -61,7 +61,9 @@ public class Bank extends SQLiteOpenHelper {
     // account to the arraylist of accounts for the bank.
     public void addAccount(IAccount account) {
         //accounts.add(account);
-
+        SQLiteDatabase rdb = this.getReadableDatabase();
+        Cursor cursor = rdb.rawQuery("INSERT INTO " + tablename + " (" + col1 + col2 + col3 + ")" + " VALUES " + "(" + "'" + account.getName() + "'" + "'" + account.getMoney() + "'" + "'0')", null);
+        rdb.close();
         // Notify all the listeners that a change has occurred with the bank’s data.
         notifyAllModelListeners();
     }
@@ -71,9 +73,13 @@ public class Bank extends SQLiteOpenHelper {
         int total = 0;
         // We loop over all the accounts in the arraylist and add the amount of
         // money in each account to the total.
-        for(IAccount a : accounts) {
-            total += a.getMoney();
-        }
+        //for(IAccount a : accounts) {
+        //    total += a.getMoney();
+        //}
+        SQLiteDatabase rdb = this.getReadableDatabase();
+        Cursor cursor = rdb.rawQuery("SELECT SUM(" + col2 + ") FROM " + tablename, null);
+        total = cursor.getInt(0);
+        rdb.close();
         return total;
     }
     // The getMoney method takes as argument the name of a customer and
@@ -85,13 +91,18 @@ public class Bank extends SQLiteOpenHelper {
     public int getMoney(String name) throws UnknownCustomerException {
         // We loop over all the accounts in the arraylist, looking for the
         // account with the correct customer name.
-        for(IAccount a : accounts) {
-            if(a.getName().equals(name)) {
+        SQLiteDatabase rdb = this.getReadableDatabase();
+        Cursor name_cursor = rdb.rawQuery("SELECT SUM(" + col1 + ") FROM " + tablename + " WHERE " + col1 + "='" + name + "'", null);
+        String temp_name = name_cursor.getString(0);
+            if(temp_name.equals(name)) {
                 // We have found the account with the correct customer name.
                 // So we return as result the amount of money in that account.
-                return a.getMoney();
+                Cursor money_cursor = rdb.rawQuery("SELECT SUM(" + col2 + ") FROM " + tablename + " WHERE " + col1 + "='" + temp_name + "'", null);
+                if(money_cursor != null) {
+                    return money_cursor.getInt(0);
+                }
             }
-        }
+        rdb.close();
         // If we reach this point in the code, then it means we have looped
         // over all the accounts in the arraylist without finding an account
         // with the correct customer name. Therefore this customer does not
@@ -108,17 +119,24 @@ public class Bank extends SQLiteOpenHelper {
     public void withdraw(String name, int amount) throws UnknownCustomerException, NotEnoughMoneyException {
         // We loop over all the accounts in the arraylist, looking for the
         // account with the correct customer name.
-        for(IAccount a : accounts) {
-            if(a.getName().equals(name)) {
+        SQLiteDatabase rdb = this.getReadableDatabase();
+        Cursor name_cursor = rdb.rawQuery("SELECT SUM(" + col1 + ") FROM " + tablename + " WHERE " + col1 + "='" + name + "'", null);
+        String temp_name = name_cursor.getString(0);
+            if(temp_name.equals(name)) {
                 // We have found the account with the correct customer name.
                 // So we withdraw the amount of money from that account, and
                 // end the function by returning nothing.
-                a.withdraw(amount);
+                Cursor type_cursor = rdb.rawQuery("SELECT SUM(" + col3 + ") FROM " + tablename + " WHERE " + col1 + "='" + temp_name + "'", null);
+                Cursor money_cursor = rdb.rawQuery("SELECT SUM(" + col2 + ") FROM " + tablename + " WHERE " + col1 + "='" + temp_name + "'", null);
+                if(amount > money_cursor.getInt(0) && type_cursor.getInt(0) == 0){
+                    throw new NotEnoughMoneyException("Cannot withdraw " + amount + " from account, only " + money_cursor.getInt(0) + " is available");
+                }
+                int remain_balance = money_cursor.getInt(0) - amount;
+                rdb.execSQL("UPDATE " + tablename + " SET " + col2 + "='" + remain_balance + "' WHERE " + col1 + "=" + temp_name);
                 // Notify all the listeners that a change has occurred with the bank’s data.
-                        notifyAllModelListeners();
+                notifyAllModelListeners();
                 return;
             }
-        }
         // If we reach this point in the code, then it means we have looped
         // over all the accounts in the arraylist without finding an account
         // with the correct customer name. Therefore this customer does not
